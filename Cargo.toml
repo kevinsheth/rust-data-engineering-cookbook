@@ -1,0 +1,6 @@
+workspace = { members = ["bigquery"] }
+[package]
+name = "rust-data-engineering-cookbook"
+version = "0.1.0"
+edition = "2021"
+

@@ -1,0 +1,24 @@
+[package]
+name = "bigquery"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+google-cloud-bigquery = "0.7.0"
+tokio = { version = "1.31.0", features = ["full"] }
+polars = { version = "0.38.3", features= ["json", "lazy"] }
+serde_json = "1.0"
+serde = "1.0.197"
+arrow = { version = "5.0", default-features = false}
+
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+enum_glob_use = "deny"
+pedantic = "deny"
+nursery = "deny"
+unwrap_used = "deny"
