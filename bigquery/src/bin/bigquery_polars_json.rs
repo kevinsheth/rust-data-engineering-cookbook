@@ -3,78 +3,53 @@
 
 use google_cloud_bigquery::client::{Client, ClientConfig};
 use google_cloud_bigquery::http::job::query::QueryRequest;
-use std::io::Cursor;
+use google_cloud_bigquery::query::{row::Row, Iterator};
 use polars::prelude::*;
-use google_cloud_bigquery::query::row::Row;
-use serde::Serialize;
+use serde_json::{json, Value};
+use std::io::Cursor;
 
-// Simplifies explicit type required by compiler
-type BigQueryResult = google_cloud_bigquery::query::Iterator<Row>;
-
-// Derive serde::Serialize for struct
-#[derive(Debug, Serialize)]
-struct Balance {
-    address: String,
-    eth_balance: String, // in real world we should make this u128
-}
-
-// Implement conversion from bigquery row to struct
-impl Balance {
-
-    fn from_row(row: &Row) -> Self {
-        let address = row.column::<String>(0)
-            .expect("Unable to extract address");
-        let eth_balance = row.column::<String>(1)
-            .expect("Unable to extract eth_balance");
-        Self { address, eth_balance }
-    }
-}
+const QUERY: &str = r#"
+    SELECT address, eth_balance
+    FROM `bigquery-public-data.crypto_ethereum.balances`
+    WHERE eth_balance != 0
+    LIMIT 10
+"#;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     // Auth with application default
     let (config, project_id) = ClientConfig::new_with_auth().await?;
 
     let project_id = project_id.ok_or("No project id!")?;
 
-
     // Execute query and read into vec of structs
     // Current "next" implementation necessitates while loop
-    let query = "SELECT * \
-        FROM `bigquery-public-data.crypto_ethereum.balances` \
-        WHERE eth_balance != 0 \
-        LIMIT 10".to_string();
-
     let request = QueryRequest {
-        query,
+        query: QUERY.to_string(),
         ..Default::default()
     };
 
-    let mut res: BigQueryResult = Client::new(config)
+    let mut res: Iterator<Row> = Client::new(config)
         .await?
         .query(&project_id, request)
         .await?;
 
-    let mut balances: Vec<Balance> = vec![];
+    let mut json_rows: Vec<Value> = Vec::new();
 
     while let Some(row) = res.next().await? {
-
-        balances.push(Balance::from_row(&row));
-
+        json_rows.push(json!({
+            "address": row.column::<String>(0).unwrap(),
+            "eth_balance": row.column::<String>(1).unwrap()
+        }));
     }
 
-    // Serialize as json and read with JsonReader
-
-    let json = serde_json::to_string(&balances)?;
+    let json = serde_json::to_string(&json_rows)?;
 
     let cursor = Cursor::new(json);
 
-    let df = JsonReader::new(cursor)
-        .finish()?;
+    let df = JsonReader::new(cursor).finish()?;
 
     println!("{}", df.head(Some(10)));
 
     Ok(())
-
 }
